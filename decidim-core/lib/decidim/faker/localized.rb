@@ -150,8 +150,14 @@ module Decidim
       # Returns a Hash with a value for each locale.
       def self.wrapped(before, after)
         result = yield
-        result.inject({}) do |wrapped, (locale, text)|
-          wrapped.update(locale => [before, text, after].join)
+        result.inject({}) do |wrapped, (locale, value)|
+          if value.is_a?(Hash)
+            value.inject({}) do |wrapped, (locale, new_value)|
+              wrapped.update(locale => [before, new_value, after].join)
+            end
+          else
+            wrapped.update(locale => [before, value, after].join)
+          end
         end
       end
 
@@ -160,13 +166,21 @@ module Decidim
       #
       # Returns a Hash with a value for each locale.
       def self.localized
-        Decidim.available_locales.inject({}) do |result, locale|
+        *locales, last_locale = Decidim.available_locales
+
+        value = locales.inject({}) do |result, locale|
           text = ::Faker::Base.with_locale(locale) do
             yield
           end
 
           result.update(locale => text)
         end.with_indifferent_access
+
+        value.update(
+          "machine_translations" => {
+            last_locale => ::Faker::Base.with_locale(last_locale) { yield }
+          }.with_indifferent_access
+        )
       end
 
       # Prefixes the +msg+ for each available locale and returns as a Hash
@@ -174,9 +188,16 @@ module Decidim
       #
       # Return a Hash with a value for each locale.
       def self.prefixed(msg, locales = Decidim.available_locales)
-        locales.inject({}) do |result, locale|
+        *all_locales, last_locale = locales
+        value = all_locales.inject({}) do |result, locale|
           result.update(locale => "#{locale.to_s.upcase}: #{msg}")
         end.with_indifferent_access
+
+        value.update(
+          "machine_translations" => {
+            last_locale => "#{last_locale.to_s.upcase}: #{msg}"
+          }.with_indifferent_access
+        )
       end
     end
   end
